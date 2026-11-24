@@ -1,0 +1,27 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/__runtime/:path*",
+      "destination": "/api/backend"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/api/relay?__gm_route=$1"
+    }
+  ],
+  "functions": {
+    "api/relay.mjs": {
+      "maxDuration": 300,
+      "includeFiles": "backend/static/**"
+    },
+    "api/backend.py": {
+      "maxDuration": 300,
+      "includeFiles": "backend/**"
+    }
+  },
+  "regions": [
+    "icn1"
+  ]
+}

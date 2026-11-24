@@ -1,0 +1,11 @@
+const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path'),assert=require('node:assert/strict');
+const ctx={window:{},document:{createElement:()=>({})}};vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../static/photo-history.js'),'utf8'),ctx);
+const select={value:'',children:[],disabled:false,writes:0,replaceChildren(){this.children=[];this.writes++;},append(o){this.children.push(o);}};let picked=null;
+const history=ctx.window.ClinicWorkspacePhotoHistory.create(select,p=>picked=p),photos=[{id:3,visit_date:'2026-10-24',site:'정수리'},{id:2,visit_date:'2026-10-24',site:'정수리'},{id:1,visit_date:'2026-09-01',site:'정수리'}];
+assert.equal(history.update(photos).id,3);assert.equal(select.children.length,3);assert.notEqual(select.children[0].textContent,select.children[1].textContent);
+select.value='1';select.onchange();assert.equal(picked.id,1);const writes=select.writes;
+for(let i=0;i<5;i++)assert.equal(history.update(photos).id,1);assert.equal(select.writes,writes);
+assert.equal(history.update([{id:4,visit_date:'2026-11-01',site:'정수리'},...photos]).id,1);
+assert.equal(history.update(photos.slice(0,2)).id,3);history.reset();assert.equal(select.disabled,true);assert.equal(history.update(photos).id,3);
+assert.equal(history.update([]),null);assert.equal(select.value,'');assert.equal(select.disabled,true);
+console.log('PASS same-day choices; older selection; repeated refresh preserves choice and options; new photo preserves choice; deleted selection fallback; patient reset; empty history');

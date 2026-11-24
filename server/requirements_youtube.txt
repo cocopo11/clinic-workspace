@@ -1,0 +1,2 @@
+youtube-transcript-api==1.2.5
+yt-dlp[default]==2026.10.26

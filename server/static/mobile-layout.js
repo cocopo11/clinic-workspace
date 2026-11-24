@@ -1,0 +1,2 @@
+/* Move existing recorder controls; do not recreate media elements or handlers. */
+(()=>{const start=document.getElementById('start');if(!start)return;const bar=document.createElement('div');bar.className='record-dock';bar.setAttribute('aria-label','경과 녹음 조작');const confirm=document.getElementById('confirmPatient');bar.append(confirm.closest('label'));const actions=document.createElement('div');actions.className='record-dock-actions';['timer','start','stop'].forEach(id=>actions.append(document.getElementById(id)));bar.append(actions);document.body.append(bar);})();

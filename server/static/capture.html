@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>가상환자 사진 전송</title>
+<style>
+body{font:16px/1.7 system-ui,sans-serif;background:#f3f5ef;color:#234735;margin:0;padding:28px 18px}
+main{max-width:520px;margin:0 auto}section{background:white;border:1px solid #dce4d5;border-radius:18px;padding:24px;margin:15px 0}
+h1{font-size:27px;line-height:1.4}.badge{font-size:12px;background:#fff0d8;padding:7px 10px;border-radius:10px}
+button{font:inherit;width:100%;border:0;border-radius:12px;padding:16px;background:#315b49;color:white;cursor:pointer}
+button:disabled{opacity:.45;cursor:default}.secondary{background:#f1f5ed;color:#234735;border:1px solid #8fa78d}
+.photo-options{display:grid;gap:12px;margin-top:20px}img{width:100%;border-radius:12px;margin-top:15px}
+#status{white-space:pre-wrap;font-weight:600}.small{font-size:13px;color:#617462}
+</style>
+<link rel="stylesheet" href="/static/mobile-ui.css?v=20261115-redesign"><body class="capture-page"><main><p><a href="/mobile" style="display:inline-block;padding:12px;background:#eaf0e7;border-radius:10px;color:#315b49">← 환자 검색·새 촬영/보고</a></p>
+<span class="badge">가상 데이터 전용 · 실제 환자 사진 금지</span>
+<h1>사진 촬영 · 전송</h1>
+<section>
+<div id="visit">촬영 연결 확인 중…</div>
+<p class="small">환자 식별번호와 부위를 확인하세요. 사진 한 장을 촬영하거나 앨범에서 선택하면 연결된 PC에 바로 전송합니다.</p>
+<div class="photo-options">
+<button id="chooseCamera" disabled>지금 사진 촬영</button>
+<input id="camera" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden disabled>
+<button id="chooseAlbum" class="secondary" disabled>앨범에서 사진 선택</button>
+<input id="album" type="file" accept="image/jpeg,image/png,image/webp" hidden disabled>
+</div>
+
+<img id="preview" hidden alt="전송할 사진 미리보기">
+<p id="status" role="status"></p>
+</section>
+<p class="small">연결은 10분간 유효하며 한 장을 전송하면 만료됩니다. 다시 전송하려면 PC에서 새 연결을 만드세요. 지원 형식은 JPEG·PNG·WebP입니다. HEIC가 전송되지 않으면 JPEG로 변환한 사진을 선택하세요.</p>
+</main>
+<script>
+const token=new URLSearchParams(location.search).get('token');
+const camera=document.getElementById('camera'),album=document.getElementById('album');
+const chooseCamera=document.getElementById('chooseCamera'),chooseAlbum=document.getElementById('chooseAlbum');
+const status=document.getElementById('status');
+let imageUrl=null,sending=false;
+function setSourcesEnabled(enabled){
+  [camera,album,chooseCamera,chooseAlbum].forEach(control=>control.disabled=!enabled);
+}
+async function check(){
+  if(!token){status.textContent='PC에서 촬영 QR/링크를 새로 만드세요.';return;}
+  try{
+    const r=await fetch('/api/capture/'+encodeURIComponent(token),{cache:'no-store'}),d=await r.json();
+    if(!r.ok)throw Error(d.detail);
+    document.getElementById('visit').textContent=d.patient_id+' · '+d.visit_date+' · '+d.site;
+    setSourcesEnabled(true);
+  }catch(e){status.textContent=e.message;}
+}
+async function sendPhoto(file,name){
+  if(sending)return;
+  if(file.size>15*1024*1024){status.textContent='15MB 이하 사진을 선택하세요.';return;}
+  sending=true;setSourcesEnabled(false);
+  status.textContent='선택한 사진을 PC로 전송 중…';
+  const preview=document.getElementById('preview');
+  if(imageUrl)URL.revokeObjectURL(imageUrl);
+  imageUrl=URL.createObjectURL(file);preview.src=imageUrl;preview.hidden=false;
+  try{
+    const form=new FormData();form.append('file',file,name);
+    const r=await fetch('/api/capture/'+encodeURIComponent(token),{method:'POST',body:form}),d=await r.json();
+    if(!r.ok){
+      if(r.status!==410)setSourcesEnabled(true);
+      throw Error(d.detail);
+    }
+    status.textContent='전송 완료 · '+d.patient_id+'\n연결된 PC의 오늘 사진 칸이 자동으로 바뀝니다.\n이 촬영 링크는 사용 완료되었습니다.';
+  }catch(e){
+    status.textContent='전송 실패 · '+e.message;
+    // Only the server can say whether an interrupted upload consumed the token.
+    // Check the session again before enabling another selection.
+    try{
+      const r=await fetch('/api/capture/'+encodeURIComponent(token),{cache:'no-store'});
+      setSourcesEnabled(r.ok);
+    }catch(_){setSourcesEnabled(false);status.textContent+='\nPC의 반영 여부를 확인하고 연결 페이지를 다시 열어 주세요.';}
+  }finally{sending=false;}
+}
+function openPicker(input){
+  if(input.disabled||sending)return;
+  input.value='';input.click();
+}
+chooseCamera.onclick=()=>openPicker(camera);
+chooseAlbum.onclick=()=>openPicker(album);
+[camera,album].forEach(input=>{input.onchange=()=>{const file=input.files[0];if(file)sendPhoto(file,file.name);};});
+window.addEventListener('pagehide',()=>{if(imageUrl)URL.revokeObjectURL(imageUrl);});check();
+</script>
+</body></html>

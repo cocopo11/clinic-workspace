@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>아이패드 경과 보고 · 시연</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f5ef;color:#243d32;font:17px/1.65 system-ui,sans-serif;padding:24px 18px}main{max-width:1100px;margin:auto}section{padding:24px;background:white;border:1px solid #dce3d8;border-radius:18px;margin:18px 0}h1{font-size:30px;line-height:1.3}h2{font-size:21px}button{font:inherit;font-weight:650;padding:17px 20px;width:100%;border:0;border-radius:12px;background:#315b49;color:white;margin:6px 0;cursor:pointer}button.secondary{background:#eaf0e7;color:#315b49}button:disabled{opacity:.45;cursor:default}label{display:block;margin:12px 0}input[type=checkbox]{width:20px;height:20px;vertical-align:middle}select{font:inherit;padding:10px;width:100%;border:1px solid #ccd6c8;border-radius:10px}audio{width:100%;margin:15px 0}.small{font-size:14px;color:#617366}.badge{font-size:13px;background:#fff0d8;border-radius:9px;padding:7px 10px}.recording-blocker{padding:14px;border:1px solid #d8a563;border-radius:10px;background:#fff1da;color:#784400;font-weight:650}.status{white-space:pre-wrap;font-weight:650}#timer{font-size:36px;font-variant-numeric:tabular-nums}pre{white-space:pre-wrap;font:inherit;word-break:break-word}a{color:#315b49}progress{width:100%;accent-color:#315b49}[hidden]{display:none!important}
+.report-photos{display:grid;grid-template-columns:1fr 1fr;gap:16px}.report-photos figure{margin:0;min-width:0}.report-photos figcaption{font-weight:700;margin-bottom:10px}.report-photos figcaption span{display:block;font-size:14px;font-weight:400}.report-frame{height:clamp(220px,42vw,480px);background:#edf2ed;border:1px dashed #c7d4ca;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;text-align:center}.report-frame img{width:100%;height:100%;object-fit:contain} @media(max-width:600px){body{padding:12px 8px}section{padding:14px}.report-photos{gap:8px}}
+</style>
+<link rel="stylesheet" href="/static/mobile-ui.css?v=20261115-redesign"><body class="record-page"><main><p><a href="/mobile" style="display:inline-block;padding:12px;background:#eaf0e7;border-radius:10px;color:#315b49">← 환자 검색·새 촬영/보고</a></p>
+<span class="badge">가상 데이터 전용 · 실제 CRM 미연결</span>
+<h1>사진 비교 · 경과 녹음</h1>
+<p class="small">녹음 종료 → PC 서버의 Whisper 전사 → 환자·방문에 연결된 모의 CRM 기록 자동 등록. 자동 모드는 자동 검토 후 차트에 바로 등록하며 수동 모드는 PC에서 확인 후 등록합니다.</p>
+<section aria-label="전후 사진 비교">
+<h2>전후 사진 비교 · 경과 보고</h2><p id="reportPatient" class="small">환자 연결 확인 중…</p>
+<div class="report-photos"><figure><figcaption>이전 방문 <span id="reportBeforeDate"></span></figcaption><div id="reportBefore" class="report-frame">이전 사진 확인 중…</div><label for="previousPhoto">비교할 이전 방문 사진</label><select id="previousPhoto" disabled><option>이전 방문 사진 없음</option></select></figure><figure><figcaption>오늘 <span id="reportTodayDate"></span></figcaption><div id="reportToday" class="report-frame">아이폰 촬영 대기</div></figure></div>
+<p id="photoSync" class="small" role="status">아이폰에서 전송한 사진을 자동으로 확인합니다.</p><button id="refreshPhotos" class="secondary" type="button">사진 다시 확인</button>
+<p class="small">실제 방문 날짜를 표시합니다. 각도·조명·촬영 부위를 확인하고 경과는 의료진이 판단합니다.</p></section>
+<section>
+<h2 id="visit">녹음 연결 확인 중…</h2><p id="environment" class="small" role="status" aria-live="polite"></p>
+<label><input id="confirmPatient" type="checkbox" disabled> 화면의 환자 식별번호·방문일을 확인했습니다.</label>
+<label for="language">전사 언어</label><select id="language" disabled><option value="ko">한국어</option><option value="auto">자동 감지</option><option value="en">영어</option></select>
+<div id="timer" aria-live="off">00:00</div><p class="small">최대 30분·150MB. 녹음 중에는 이 화면을 켜 두세요. 화면 잠금·다른 앱 전환 시 녹음이 중단될 수 있습니다.</p>
+<button id="start" disabled>경과 녹음 시작</button><button id="stop" class="secondary" hidden>녹음 종료·자동 등록</button>
+<audio id="playback" controls hidden></audio><a id="saveAudio" hidden>전송 실패에 대비해 이 녹음 저장</a>
+<button id="retryUpload" class="secondary" hidden>같은 녹음 다시 전송</button>
+<button id="refreshConnection" class="secondary" type="button">연결 상태 다시 확인</button>
+<p id="status" class="status" role="status">연결을 확인하고 있습니다.</p><progress id="progress" max="100" value="0" hidden></progress>
+</section>
+<section id="result" hidden><h2>자동 등록 결과</h2><p id="registered" class="status"></p><h3>전사 원문</h3><pre id="transcript"></pre><p class="small">PC에서 약명·숫자·부정어를 검토할 수 있습니다. 이 기록은 로컬 모의 CRM에만 저장하며 실제 병원 CRM에 전송하지 않습니다.</p></section>
+</main>
+<script src="/static/photo-history.js?v=20261115-history"></script>
+<script src="/static/report-photos.js?v=20261115-history"></script>
+<script src="/static/api-client.js"></script><script src="/static/record.js?v=20261118-workspace-cleanup"></script>
+<script src="/static/mobile-layout.js?v=20261116-redesign"></script></body></html>
