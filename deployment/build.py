@@ -6,7 +6,7 @@ from pathlib import Path
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--existing-service', action='store_true',
-                    help='Use the original service demo password in login examples')
+                    help='Retained for compatibility with existing deployment commands')
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 output = root / 'build/vercel'
@@ -36,10 +36,8 @@ for source in paths:
     if source.suffix == '.py':
         for current, legacy in compatibility.items():
             text = text.replace(current, legacy)
-    if args.existing_service:
-        text = text.replace('ClinicDemo42!', 'Demo1234!')
     if source.parent.name == 'static':
-        text = re.sub(r'([?&]v=)[A-Za-z0-9._-]+', r'\g<1>20261124-portfolio', text)
+        text = re.sub(r'([?&]v=)[A-Za-z0-9._-]+', r'\g<1>20261125-security', text)
     target = backend / source.relative_to(root / 'server')
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding='utf-8')

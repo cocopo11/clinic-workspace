@@ -1,0 +1,23 @@
+name: Clinic Workspace tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: python -m pip install -r server/requirements.txt -r server/requirements_https.txt -r deployment/vercel/requirements.txt
+      - run: python -m unittest discover -s server/tests
+        env:
+          PYTHONPATH: server
+      - run: node --test server/tests/*.cjs
+      - run: python deployment/build.py
+      - run: npm ci --ignore-scripts && npm test && npm audit --omit=dev
+        working-directory: build/vercel

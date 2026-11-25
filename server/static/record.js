@@ -3,7 +3,7 @@
  const $=id=>document.getElementById(id),token=new URLSearchParams(location.search).get('token')||'';
  const endpoint='/api/recording/'+encodeURIComponent(token);
  let valid=false,used=false,recorder=null,media=null,chunks=[],blob=null,audioUrl='',timer=null,poller=null,started=0,bytes=0,stopping=false,uploading=false,starting=false,linkError='';
- const api=(path,options={})=>window.ClinicWorkspaceHTTP.requestJSON(path,{credentials:'omit',cache:'no-store',...options});
+ const api=(path,options={})=>window.ClinicWorkspaceHTTP.requestJSON(path,{credentials:'same-origin',cache:'no-store',...options});
  function message(text){$('status').textContent=text;}
  function release(){media?.getTracks().forEach(t=>t.stop());media=null;clearInterval(timer);timer=null;}
  function recordingBlocker(){

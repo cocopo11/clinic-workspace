@@ -4,6 +4,10 @@
 
 의원 채용 과제를 계기로 시작한 개인 프로젝트입니다. 이 공개판은 가상 환자, 합성 그림, 예시 업무 문서를 사용합니다. 진료차트 등록 대상은 프로젝트 내부의 모의 CRM입니다.
 
+[온라인 데모 열기](https://clinic-workspace-demo.vercel.app/)
+
+온라인에서 **내 체험 공간 만들기**를 누르면 방문자별 가상 데이터가 생성됩니다. 이 공간 안에서는 `admin`, `doctor`, `staff`와 `ClinicDemo42!`로 역할을 체험할 수 있습니다. 운영자의 기존 데이터와 비밀번호는 분리됩니다. 공간은 24시간 후 만료되며 파일 한도는 100MB입니다. 다른 기기에서도 같은 데이터를 보려면 **다른 기기에서 같은 체험 공간 열기**로 연결합니다. AI 기능은 운영 PC 연결 상태에 따라 이용할 수 있습니다.
+
 ## 로컬에서 시작하기
 
 Python 3.12 기준입니다. 저장소 루트에서 실행합니다.
@@ -35,7 +39,7 @@ macOS와 Linux에서는 다음과 같이 실행합니다.
 3. **음성에서 기록까지** — AI 설치 후 모바일 진료에서 사진 비교·녹음을 엽니다. 자동 모드에서는 전사 결과가 모의 차트에 기록됩니다. 수동 모드에서는 원문을 확인한 뒤 등록합니다. 자동 모드는 데모의 저장 정책이며 전사의 임상적 정확성 판정을 뜻하지 않습니다.
 4. **근거를 따라가는 검색** — AI 설치 후 직원 계정으로 CS 위키에 ‘예약을 변경해 달라는 고객에게 바로 변경됐다고 안내해도 되나요?’를 입력합니다. 답변에 나온 문구를 자료실의 ‘예약 변경 응대 · 예시’ 원문과 대조할 수 있습니다.
 
-휴대폰·아이패드에서 같은 PC에 접속할 때는 해당 PC의 LAN 주소를 사용합니다. 아이패드 마이크에는 신뢰된 HTTPS가 필요합니다. 같은 사설 Wi-Fi에서 기본 서버를 종료한 뒤 `python -m pip install -r server/requirements_https.txt`, `python server/easy_https.py`를 순서대로 실행하면 연결 및 기기 등록 주소가 표시됩니다.
+휴대폰·아이패드에서 같은 PC에 접속할 때는 해당 PC의 LAN 주소를 사용합니다. 아이패드 마이크에는 신뢰된 HTTPS가 필요합니다. 같은 사설 Wi-Fi에서 기본 서버를 종료한 뒤 `python -m pip install -r server/requirements_https.txt -r deployment/vercel/requirements.txt`, `python server/easy_https.py`를 순서대로 실행하면 연결 및 기기 등록 주소가 표시됩니다.
 
 ## 로컬 AI 켜기
 
@@ -79,7 +83,7 @@ flowchart TD
 저장소 루트에서 다음 명령을 실행합니다. API 테스트는 임시 DB와 테스트용 AI를 사용합니다. HTTPS 관련 테스트에는 cryptography가 필요합니다.
 
 ~~~bash
-python -m pip install -r server/requirements_https.txt
+python -m pip install -r server/requirements_https.txt -r deployment/vercel/requirements.txt
 cd server
 python -m unittest discover -s tests
 cd ..
@@ -87,3 +91,14 @@ node --test server/tests/*.cjs
 ~~~
 
 GitHub Actions 설정은 Python API 및 JavaScript 클라이언트 테스트를 실행합니다. 기본 실행 단위는 로컬 웹앱입니다. 클라우드용 게이트웨이와 빌드 절차는 [배포 안내](deployment/README.md)에 있습니다. 독립 C++ 릴스 편집기는 별도 프로젝트입니다.
+
+## 공개 데모의 보안 경계
+
+- 방문자별 PostgreSQL 스키마와 비공개 Blob 경로를 사용합니다. 서버가 발급한 무작위 HttpOnly 쿠키로 공간을 선택하고, 세션과 환자 자료는 해당 공간에서만 조회합니다.
+- 운영 계정의 공개된 기본 비밀번호를 교체하고 기존 세션·촬영 연결을 무효화합니다. 새 직원 계정에는 각각 임의 비밀번호를 발급합니다.
+- 로그인·쓰기·체험 공간 생성·AI 요청 한도는 DB 트랜잭션으로 공유합니다. 서버 인스턴스가 달라져도 동일한 제한이 적용됩니다.
+- 반복 인증 실패는 5분 단위로 집계하고, 접근 이력은 최대 90일·50,000건을 유지합니다. 인증 만료 시 사진 자동 조회를 중단합니다.
+- 원격 파일과 DB 저장 중 일부만 성공한 경우 삭제를 시도하고, 실패한 삭제는 영속 장부에 남겨 재시도합니다. 일일 정리 작업은 만료된 공간과 오래된 미참조 파일을 삭제합니다.
+- 공개 HTML에는 nonce 기반 CSP를 적용합니다. HTTPS·HttpOnly·SameSite 쿠키와 API 권한·CSRF 검사를 함께 사용합니다.
+
+[보안 회귀 테스트](server/tests/test_security.py)와 [배포 안내](deployment/README.md)를 참고하세요. 공유용 체험 연결은 해당 공간에 접근하는 비밀 링크이므로 본인 기기에만 전달해야 합니다. 이 프로젝트는 실환자용 운영 서비스 인증이나 외부 침투 테스트를 받은 제품은 아닙니다.

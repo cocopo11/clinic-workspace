@@ -40,10 +40,10 @@ def install_cloud_routes(app, store, current, manager, cfg):
     @app.post('/__upload/init')
     async def create_upload(request: Request, user=Depends(current)):
         with store.connect() as c:
-            expired=[r[0] for r in c.execute('SELECT id FROM cloud_uploads WHERE expires<? LIMIT 4',(time.time(),))]
+            expired=[r[0] for r in c.execute('SELECT id FROM cloud_uploads WHERE expires<? LIMIT 4',(time.time()-600,))]
         for expired_id in expired:
-            await clean_parts(expired_id)
-            with store.connect() as c:c.execute('DELETE FROM cloud_uploads WHERE id=? AND expires<?',(expired_id,time.time()))
+            if await clean_parts(expired_id):
+                with store.connect() as c:c.execute('DELETE FROM cloud_uploads WHERE id=? AND expires<?',(expired_id,time.time()-600))
         spec=await request.json();path=spec.get('path','');size=spec.get('size',0)
         import re
         if spec.get('method')!='POST' or not re.fullmatch(r'/api/(patients/[A-Za-z0-9-]+/photos|recording/[A-Za-z0-9_-]+|capture/[A-Za-z0-9_-]+)',path):
@@ -57,6 +57,10 @@ def install_cloud_routes(app, store, current, manager, cfg):
         with store.connect() as c:
             if c.execute("SELECT COUNT(*) FROM cloud_uploads WHERE owner_id=? AND expires>? AND status='uploading'",(user['id'],time.time())).fetchone()[0]>=4:
                 raise HTTPException(429,'진행 중인 전송을 먼저 완료하세요.')
+            if cfg.get('sandbox'):
+                stored=c.execute("SELECT COALESCE(SUM(size),0) FROM asset_ledger WHERE area!='parts'").fetchone()[0]
+                reserved=c.execute("SELECT COALESCE(SUM(size),0) FROM cloud_uploads WHERE status IN ('uploading','committing') AND expires>?",(time.time(),)).fetchone()[0]
+                if stored+reserved+size>100*1024*1024:raise HTTPException(413,'체험 공간의 파일 용량은 100MB까지입니다.')
             c.execute('INSERT INTO cloud_uploads(id,owner_id,path,content_type,size,expires) VALUES(?,?,?,?,?,?)',
                       (uid,user['id'],path,str(spec.get('content_type',''))[:200],size,time.time()+(3600 if recording else 900)))
         return {'id':uid}
@@ -75,23 +79,59 @@ def install_cloud_routes(app, store, current, manager, cfg):
             row=own(c,uid,user)
             if row['status']!='uploading' or offset!=row['received'] or offset+len(raw)>row['size']:
                 raise HTTPException(409,'전송 순서를 확인하세요.')
-        name=f'clinicworkspace/upload-parts/{uid}/{offset}-{uuid.uuid4().hex}'
-        await put_blob(name,raw,access='private')
+        prefix=f'clinicworkspace/workspaces/{store.schema}/upload-parts/' if store.schema else 'clinicworkspace/upload-parts/'
+        name=f'{prefix}{uid}/{offset}-{uuid.uuid4().hex}'
         with store.connect() as c:
-            row=own(c,uid,user)
-            if offset!=row['received']:raise HTTPException(409,'다른 창에서 전송이 진행됐습니다.')
-            c.execute('INSERT INTO cloud_parts VALUES(?,?,?,?)',(uid,offset,name,len(raw)))
-            c.execute('UPDATE cloud_uploads SET received=received+? WHERE id=?',(len(raw),uid))
+            c.execute('INSERT INTO asset_ledger VALUES(?,?,?,?,?)',('parts',name,len(raw),'pending',time.time()))
+        try:
+            await put_blob(name,raw,access='private')
+            with store.connect() as c:
+                row=own(c,uid,user)
+                if row['status']!='uploading' or offset!=row['received']:
+                    raise HTTPException(409,'다른 창에서 전송이 진행됐습니다.')
+                c.execute('INSERT INTO cloud_parts VALUES(?,?,?,?)',(uid,offset,name,len(raw)))
+                c.execute('UPDATE cloud_uploads SET received=received+? WHERE id=?',(len(raw),uid))
+                c.execute("UPDATE asset_ledger SET state='stored' WHERE area='parts' AND name=?",(name,))
+        except Exception:
+            await delete_part(name)
+            raise
         return {'received':offset+len(raw)}
 
-    async def clean_parts(uid):
+    async def delete_part(path):
         from vercel.blob import delete_blob
+        try:
+            await delete_blob(path)
+        except Exception:
+            return False
         with store.connect() as c:
-            paths=[r[0] for r in c.execute('SELECT blob_path FROM cloud_parts WHERE upload_id=?',(uid,))]
-        for path in paths:
-            try:await delete_blob(path)
-            except Exception:pass
-        with store.connect() as c:c.execute('DELETE FROM cloud_parts WHERE upload_id=?',(uid,))
+            c.execute('DELETE FROM cloud_parts WHERE blob_path=?',(path,))
+            c.execute("DELETE FROM asset_ledger WHERE area='parts' AND name=?",(path,))
+        return True
+
+    async def clean_parts(uid):
+        prefix=f'clinicworkspace/workspaces/{store.schema}/upload-parts/' if store.schema else 'clinicworkspace/upload-parts/'
+        with store.connect() as c:
+            paths={r[0] for r in c.execute('SELECT blob_path FROM cloud_parts WHERE upload_id=?',(uid,))}
+            paths.update(r[0] for r in c.execute("SELECT name FROM asset_ledger WHERE area='parts' AND name LIKE ?",(prefix+uid+'/%',)))
+        results=[await delete_part(path) for path in paths]
+        return all(results)
+
+    async def cleanup_uploads():
+        with store.connect(shared=True) as c:
+            ids=[r[0] for r in c.execute('SELECT id FROM cloud_uploads WHERE expires<?',(time.time()-600,))]
+        for uid in ids:
+            if await clean_parts(uid):
+                with store.connect() as c:c.execute('DELETE FROM cloud_uploads WHERE id=?',(uid,))
+        # Reconcile pre-fix parts that never acquired a database row.
+        from vercel.blob import query_blobs
+        prefix=f'clinicworkspace/workspaces/{store.schema}/upload-parts/' if store.schema else 'clinicworkspace/upload-parts/'
+        async for blob in query_blobs(prefix=prefix,page_size=100):
+            if blob.uploaded_at.timestamp()<time.time()-86400:
+                uid=blob.pathname[len(prefix):].split('/')[0]
+                with store.connect(shared=True) as c:
+                    active=c.execute('SELECT 1 FROM cloud_uploads WHERE id=? AND expires>?',(uid,time.time()-600)).fetchone()
+                if not active:await delete_part(blob.pathname)
+    app.state.cleanup_uploads=cleanup_uploads
 
     @app.post('/__upload/{uid}/commit')
     async def commit_upload(uid:str,request:Request,user=Depends(current)):

@@ -20,6 +20,7 @@ async function probe(config,fetcher,site){
 }
 export async function handle(request,env,fetcher=fetch,connections=registry(env)){
  const u=new URL(request.url);
+ const connectionSite=env.CONNECTION_SITE_ORIGIN||u.origin;
  // The query capture ensures the original route survives Vercel's rewrite.
  if(u.searchParams.has('__gm_route')){u.pathname='/'+u.searchParams.get('__gm_route').replace(/^\/+/, '');u.searchParams.delete('__gm_route');request=new Request(u,request);}
  try{
@@ -34,8 +35,8 @@ export async function handle(request,env,fetcher=fetch,connections=registry(env)
    const legacy=await load(request,env.CONFIG_KEY);
    if(!legacy)return json({detail:'기존에 PC를 연결했던 브라우저에서 새로고침하세요.'},403);
    const input=await request.json();let candidate=legacy;
-   if(input.code){try{candidate=parseCode(input.code,u.origin);}catch{return json({detail:'PC 연결 정보를 확인하세요.'},400);}}
-   const state=await probe(candidate,fetcher,u.origin);
+   if(input.code){try{candidate=parseCode(input.code,connectionSite);}catch{return json({detail:'PC 연결 정보를 확인하세요.'},400);}}
+   const state=await probe(candidate,fetcher,connectionSite);
    if(!state.chunked_upload)return json({detail:'PC 연결 창을 확인하세요.'},409);
    const manager=randomBytes(32).toString('hex');
    try{await connections.claim(u.origin,{...candidate,managerHash:hash(manager),managerExpires:Date.now()+AGE*1000});}
@@ -45,15 +46,15 @@ export async function handle(request,env,fetcher=fetch,connections=registry(env)
   if(u.pathname==='/__api/connect'){
    if(request.method!=='POST')return json({detail:'요청 방식을 확인하세요.'},405);
    if(!manages(request,config))return json({detail:'처음 PC를 연결한 브라우저에서 실행하세요. 아이폰·아이패드는 같은 웹주소에서 직원 로그인만 하면 됩니다.'},403);
-   let next;try{next=parseCode((await request.json()).code,u.origin);}catch{return json({detail:'새 웹주소용 PC 연결 코드인지 확인하세요. v1.3 덮어쓰기 파일을 적용한 뒤 실행하세요.'},400);}
-   const state=await probe(next,fetcher,u.origin);
+   let next;try{next=parseCode((await request.json()).code,connectionSite);}catch{return json({detail:'새 웹주소용 PC 연결 코드인지 확인하세요. v1.3 덮어쓰기 파일을 적용한 뒤 실행하세요.'},400);}
+   const state=await probe(next,fetcher,connectionSite);
    if(!state.chunked_upload)return json({detail:'PC 연결 프로그램 v1.3을 덮어쓴 뒤 다시 실행하세요.'},409);
    await connections.save(u.origin,{...next,managerHash:config.managerHash,managerExpires:Date.now()+AGE*1000});
    return json({ok:true,app_version:state.app_version},200,{'Set-Cookie':managerCookie(managerValue(request))});
   }
   if(u.pathname==='/__api/status'){
    if(!config)return json({configured:false,connected:false,can_migrate:!!(await load(request,env.CONFIG_KEY))});
-   try{const s=await probe(config,fetcher,u.origin);return json({configured:true,connected:true,app_version:s.app_version,cloud_rpc:!!s.cloud_rpc,connector_version:s.connector_version||'1.x'});}catch{return json({configured:true,connected:false});}
+   try{const s=await probe(config,fetcher,connectionSite);return json({configured:true,connected:true,app_version:s.app_version,cloud_rpc:!!s.cloud_rpc,connector_version:s.connector_version||'1.x'});}catch{return json({configured:true,connected:false});}
   }
   if(u.pathname.startsWith('/__api/'))return json({detail:'기능을 찾지 못했습니다.'},404);
   if(!config)return request.method==='GET'&&!u.pathname.startsWith('/api/')?html():json({detail:'PC에서 START_INTERVIEW_Windows.bat을 실행하세요. 휴대기기에서는 코드 입력이 필요 없습니다.'},503);

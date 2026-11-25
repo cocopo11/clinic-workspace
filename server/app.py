@@ -12,7 +12,7 @@ import sqlite3
 import tempfile
 import time
 import uuid
-from collections import defaultdict, deque
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -83,10 +83,13 @@ def make_sample():
 
 def create_app(settings=None, ai=None, youtube_importer=None):
     cfg = settings or settings_from_env()
-    store = Store(cfg["data_dir"], cfg.get("database_url"))
+    store = Store(cfg["data_dir"], cfg.get("database_url"), cfg.get("schema"))
+    from security import harden_owner, consume_limits, client_key
+    if cfg.get("owner_password"):
+        harden_owner(store, cfg["owner_password"])
     if cfg.get("cloud"):
         from cloud_files import CloudFiles
-        store.cloud_files = CloudFiles(store.directory)
+        store.cloud_files = CloudFiles(store.directory, cfg.get("schema"), store=store)
     if ai is None and cfg.get("cloud"):
         from cloud_ai import CloudAI, RemoteYouTubeImporter
         ai = CloudAI(cfg)
@@ -113,7 +116,6 @@ def create_app(settings=None, ai=None, youtube_importer=None):
     app.state.recording_jobs = recording_jobs
     app.state.store, app.state.ai, app.state.cfg = store, ai, cfg
     subscribers = defaultdict(set)
-    attempts = defaultdict(deque)
     sample = make_sample()
     # Fictional baseline photos, same diagram, no treatment outcome illustrated.
     for pid in ("DEMO-101", "DEMO-103"):
@@ -141,7 +143,13 @@ def create_app(settings=None, ai=None, youtube_importer=None):
             if origin and urlsplit(origin).netloc != host:
                 return JSONResponse({"detail": "다른 출처의 요청은 허용하지 않습니다."}, status_code=403)
         try:
+            if request.url.path.startswith('/api/'):
+                request.state.authenticated_user = await run_in_threadpool(store.session, request.cookies.get('gm_session'))
+                if not request.state.authenticated_user:
+                    consume_limits(store, [('anonymous:'+client_key(request), 120, 60)])
             response = await call_next(request)
+        except HTTPException as error:
+            response = JSONResponse({'detail': error.detail}, status_code=error.status_code, headers=error.headers)
         except Exception as error:
             error_id = uuid.uuid4().hex[:12]
             cause=error.__cause__ or error.__context__ or error
@@ -169,13 +177,15 @@ def create_app(settings=None, ai=None, youtube_importer=None):
         return response
 
     def current(request: Request):
-        user = store.session(request.cookies.get("gm_session"))
+        user = request.state.authenticated_user if hasattr(request.state, "authenticated_user") else store.session(request.cookies.get("gm_session"))
         if not user:
             raise HTTPException(401, "로그인이 필요합니다.")
         if request.method not in {"GET", "HEAD"}:
             if not secrets.compare_digest(request.headers.get("X-CSRF-Token", ""), user["csrf"]):
                 raise HTTPException(403, "요청 검증에 실패했습니다. 다시 로그인하세요.")
         request.state.actor = user["id"]
+        if request.method not in {"GET", "HEAD"}:
+            consume_limits(store, [("write:"+user["id"], 120, 60)])
         return user
 
     def clinical(user=Depends(current)):
@@ -267,15 +277,10 @@ def create_app(settings=None, ai=None, youtube_importer=None):
 
     @app.post("/api/login")
     async def login(body: Login, request: Request):
-        key = request.client.host if request.client else "local"
-        q = attempts[key]
-        while q and q[0] < time.time()-60:
-            q.popleft()
-        if len(q) >= 10:
-            raise HTTPException(429, "로그인 시도가 많습니다. 1분 뒤 다시 시도하세요.")
+        consume_limits(store, [("login-ip:"+client_key(request), 60, 60),
+                               ("login-user:"+body.username.casefold(), 10, 60)])
         result = await run_in_threadpool(store.login, body.username, body.password)
         if not result:
-            q.append(time.time())
             store.audit("anonymous", "login_failed", result="denied")
             raise HTTPException(401, "아이디 또는 비밀번호가 일치하지 않습니다.")
         token, csrf, user = result
@@ -446,7 +451,7 @@ def create_app(settings=None, ai=None, youtube_importer=None):
                                 (pid, today(), "정수리", filename, time.time()))
                 photo_id = cur.lastrowid
         except Exception:
-            path.unlink(missing_ok=True)
+            store.delete_file("photos", filename)
             raise
         await publish(pid, {"photo_id": photo_id})
         return {"photo_id": photo_id, "patient_id": pid, "visit_date": today()}

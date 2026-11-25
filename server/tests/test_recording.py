@@ -37,9 +37,9 @@ class RecordingTests(unittest.TestCase):
         self.ai=RecordingAI();self.app=create_app(cfg,self.ai)
         self.admin=TestClient(self.app);self.admin.__enter__();self.clients=[self.admin]
         self.login(self.admin,'admin');self.doctor=self.client('doctor');self.staff=self.client('staff');self.phone=TestClient(self.app);self.clients.append(self.phone)
-    def login(self,c,uid):
-        r=c.post('/api/login',json={'username':uid,'password':'ClinicDemo42!'});self.assertEqual(r.status_code,200);c.headers['X-CSRF-Token']=r.json()['csrf']
-    def client(self,uid):c=TestClient(self.app);self.clients.append(c);self.login(c,uid);return c
+    def login(self,c,uid,password="ClinicDemo42!"):
+        r=c.post('/api/login',json={'username':uid,'password':password});self.assertEqual(r.status_code,200);c.headers['X-CSRF-Token']=r.json()['csrf']
+    def client(self,uid,password="ClinicDemo42!"):c=TestClient(self.app);self.clients.append(c);self.login(c,uid,password);return c
     def tearDown(self):
         self.ai.release.set()
         if self.ai.entered.is_set():
@@ -223,7 +223,7 @@ class RecordingTests(unittest.TestCase):
 
     def test_other_doctor_cannot_list_or_review_owner_recording(self):
         r=self.admin.post('/api/admin/users',json={'id':'doctor2','name':'다른 가상 의료진','role':'doctor'});self.assertEqual(r.status_code,200)
-        other=self.client('doctor2');token=self.pair();self.ai.release.set();self.upload(token);job=self.wait_job(token)
+        other=self.client('doctor2',r.json()['demo_password']);token=self.pair();self.ai.release.set();self.upload(token);job=self.wait_job(token)
         self.assertEqual(other.get('/api/recording-jobs?patient_id=DEMO-101').json()['jobs'],[])
         self.assertEqual(other.post('/api/recording-jobs/'+job['id']+'/review',json={'text':job['note_text'],'reviewed':True,'expected_version':1}).status_code,404)
         self.assertEqual(self.phone.post('/api/recording/'+token,headers={'Origin':'https://evil.example'},files={'file':('x.wav',wav())}).status_code,403)

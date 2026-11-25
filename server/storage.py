@@ -21,7 +21,8 @@ def token_hash(token):
 
 
 class Store:
-    def __init__(self, directory, database_url=None):
+    def __init__(self, directory, database_url=None, schema=None):
+        self.schema = schema
         self.database_url = database_url
         self.cloud_files = None
         self.cloud_schema_ready = False
@@ -30,6 +31,8 @@ class Store:
         (self.directory / "photos").mkdir(exist_ok=True)
         self.path = self.directory / "clinicworkspace.sqlite3"
         self.initialize()
+        from security import initialize_security
+        initialize_security(self)
 
     def save_file(self, area, name, data):
         if self.cloud_files:
@@ -53,7 +56,7 @@ class Store:
     def connect(self, *, shared=False):
         if self.database_url:
             from postgres_store import connect
-            with connect(self.database_url, shared=shared) as connection:
+            with connect(self.database_url, shared=shared, schema=self.schema) as connection:
                 yield connection
             return
         con = sqlite3.connect(self.path, timeout=15)
@@ -223,12 +226,8 @@ class Store:
                     [("ONB-INTRO", did, i) for i, did in enumerate(("D02", "D01", "D05"), 1)])
 
     def audit(self, actor, action, object_id="", result="success", detail=None, connection=None):
-        args = (actor, action, str(object_id), time.time(), result, json.dumps(detail or {}, ensure_ascii=False))
-        if connection is not None:
-            connection.execute("INSERT INTO audit(actor,action,object_id,created,result,detail) VALUES(?,?,?,?,?,?)", args)
-            return
-        with self.connect() as c:
-            c.execute("INSERT INTO audit(actor,action,object_id,created,result,detail) VALUES(?,?,?,?,?,?)", args)
+        from security import audit_event
+        return audit_event(self, actor, action, object_id, result, detail, connection)
 
     def login(self, username, password):
         with self.connect() as c:

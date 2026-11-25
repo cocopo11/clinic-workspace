@@ -44,3 +44,16 @@ test('PC connection management remains with the original authenticated manager f
  const r=await cloudHandle(req('/__connect'),env,legacy,fetch,noPC);assert.deepEqual(await r.json(),{legacy:true});
  const health=await cloudHandle(req('/__health'),env,legacy,fetch,noPC);assert.equal((await health.json()).cloud,true);
 });
+
+test('CSP uses a fresh nonce for every script and never allows inline scripts globally',async()=>{
+ const make=()=>cloudHandle(req('/'),env,legacy,async()=>new Response('<head><script>window.test=1</script></head><body></body>',{headers:{'content-type':'text/html'}}),noPC);
+ const a=await make(),b=await make();const policy=a.headers.get('content-security-policy');
+ assert.match(policy,/script-src 'self' 'nonce-/);assert.doesNotMatch(policy,/script-src[^;]*unsafe-inline/);
+ assert.notEqual(policy,b.headers.get('content-security-policy'));
+ const html=await a.text();const scripts=html.match(/<script[^>]*>/g);assert.ok(scripts.every(s=>s.includes('nonce=')));
+});
+test('browser supplied internal client identity is replaced with edge identity',async()=>{
+ let headers;
+ await cloudHandle(req('/api/me',{headers:{'x-goodmona-client':'forged','x-forwarded-for':'forged','x-vercel-forwarded-for':'203.0.113.10'}}),env,legacy,async(url,opts)=>{headers=opts.headers;return Response.json({});},noPC);
+ assert.equal(headers.get('x-goodmona-client'),'203.0.113.10');assert.equal(headers.get('x-forwarded-for'),null);
+});

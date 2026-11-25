@@ -23,5 +23,11 @@
   },
   "regions": [
     "icn1"
+  ],
+  "crons": [
+    {
+      "path": "/__maintenance",
+      "schedule": "17 3 * * *"
+    }
   ]
 }

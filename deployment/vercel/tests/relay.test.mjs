@@ -41,3 +41,19 @@ test('browser adapter splits a real 6 MB multipart request and forwards its exac
  expected=Buffer.from(await request.clone().arrayBuffer());const r=await window.fetch(request);assert.equal((await r.json()).uploaded,true);
  assert.deepEqual(Buffer.concat(encoded),expected);assert(encoded.every(p=>p.length<=1024*1024));assert(!calls.some(c=>c.includes('/api/patients/')));
 });
+
+
+test('a new public domain uses the established encrypted PC connection binding',async()=>{
+ const f=fixture();await migrate(f);
+ const site='https://clinic-workspace-demo.vercel.app';
+ const mappedEnv={...env,CONNECTION_SITE_ORIGIN:origin};
+ const connections=createRegistry(mappedEnv,f.blob);
+ const config=await connections.load(site);
+ assert.equal(config.token,token);
+ assert.equal(config.origin,tunnel);
+ const result=await handle(new Request(site+'/__api/status'),mappedEnv,probe,connections);
+ assert.equal(result.status,200);
+ assert.equal((await result.json()).connected,true);
+ const encoded=[...f.objects.values()][0];
+ assert(!encoded.includes(token));
+});

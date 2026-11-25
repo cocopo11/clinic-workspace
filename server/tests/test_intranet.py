@@ -16,9 +16,9 @@ class IntranetTests(unittest.TestCase):
     def tearDown(self):
         for c in self.clients:c.close()
         self.temp.cleanup()
-    def login(self,uid):
+    def login(self,uid,password="ClinicDemo42!"):
         c=TestClient(self.app);self.clients.append(c)
-        r=c.post('/api/login',json={'username':uid,'password':'ClinicDemo42!'})
+        r=c.post('/api/login',json={'username':uid,'password':password})
         self.assertEqual(r.status_code,200,r.text);c.headers['X-CSRF-Token']=r.json()['csrf'];return c
     def add(self,client=None,**kw):
         body=dict(title='가상 자료',content='가상 안내 원문입니다.',approved=True);body.update(kw)
@@ -171,9 +171,10 @@ class IntranetTests(unittest.TestCase):
     def test_account_create_duplicate_and_admin_self_protection(self):
         body={'id':'new_staff','name':'새 가상 직원','role':'staff'}
         self.assertEqual(self.staff.post('/api/admin/users',json=body).status_code,403)
-        self.assertEqual(self.admin.post('/api/admin/users',json=body).status_code,200)
+        created=self.admin.post('/api/admin/users',json=body)
+        self.assertEqual(created.status_code,200)
         self.assertEqual(self.admin.post('/api/admin/users',json=body).status_code,409)
-        self.assertEqual(self.login('new_staff').get('/api/me').json()['user']['role'],'staff')
+        self.assertEqual(self.login('new_staff',created.json()['demo_password']).get('/api/me').json()['user']['role'],'staff')
         self.assertEqual(self.admin.patch('/api/admin/users/admin',json={'name':'관리자','role':'staff','active':False,'expected_revision':1}).status_code,400)
         users=self.admin.get('/api/users').text;self.assertNotIn('password_hash',users);self.assertNotIn('salt',users)
     def test_audit_filters_permissions_and_no_original_content(self):

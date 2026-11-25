@@ -4,12 +4,14 @@ const PATH='connection/config.enc',registries=new WeakMap();
 export function createRegistry(env,blob={get,put},clock=Date.now){
  const cache=new Map();
  async function write(site,config,overwrite){
+  site=env.CONNECTION_SITE_ORIGIN||site;
   const encoded=await seal(config,env.CONFIG_KEY,'shared:'+site,null);
   await blob.put(PATH,encoded,{access:'private',addRandomSuffix:false,allowOverwrite:overwrite,contentType:'application/octet-stream',cacheControlMaxAge:60,token:env.BLOB_READ_WRITE_TOKEN});
   cache.set(site,{value:config,until:clock()+5000});
  }
  return {
   async load(site){
+   site=env.CONNECTION_SITE_ORIGIN||site;
    const cached=cache.get(site);if(cached&&cached.until>clock())return cached.value;
    const result=await blob.get(PATH,{access:'private',useCache:false,token:env.BLOB_READ_WRITE_TOKEN});let value=null;
    if(result){if(result.statusCode!==200)throw Error('Connection unavailable');value=await open(await new Response(result.stream).text(),env.CONFIG_KEY,'shared:'+site,true);if(!value)throw Error('Connection damaged');}

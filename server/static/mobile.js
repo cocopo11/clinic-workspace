@@ -12,4 +12,4 @@ $('camera').onclick=()=>begin('camera');$('report').onclick=()=>begin('report');
 async function revoke(){await api('/api/recording-links/revoke','POST',{});await api('/api/capture-sessions/revoke','POST',{});}
 $('change').onclick=async()=>{if(busy||!confirm('촬영·녹음을 마치고 다른 환자로 이동할까요?'))return;try{await revoke();closeWork();patient=null;$('selected').hidden=true;status('다음 환자를 검색하세요.');}catch(e){error(e);}};
 $('logout').onclick=async()=>{try{await api('/api/logout','POST',{});closeWork();patient=null;csrf='';$('selected').hidden=true;$('search').hidden=true;$('login').hidden=false;status('로그아웃했습니다.');}catch(e){error(e);}};
-api('/api/me').then(signed).catch(e=>{if(e.status!==401)error(e);});})();
+Promise.resolve(window.ClinicWorkspaceDemo?.init()).then(()=>api('/api/me')).then(signed).catch(e=>{if(e.status!==401)error(e);});})();

@@ -17,5 +17,11 @@ settings.update(
     secure_cookie=True,
     public_base_url=os.environ.get('PUBLIC_BASE_URL', os.environ.get('GOODMONA_AI_BRIDGE', '')),
 )
-app = create_app(settings)
+# Fail closed if private credentials were not provisioned.
+settings['owner_password'] = os.environ['CLINICWORKSPACE_ADMIN_PASSWORD']
+from fastapi import FastAPI
+from sandbox import WorkspaceRouter
+owner = create_app(settings)
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+app.mount('/', WorkspaceRouter(owner, create_app, settings))
 protect_cloud_app(app)

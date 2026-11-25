@@ -1,4 +1,4 @@
-import {timingSafeEqual} from 'node:crypto';
+import {timingSafeEqual,randomBytes} from 'node:crypto';
 import {registry} from './registry.mjs';
 import {remoteScript} from './remote.mjs';
 import {pcInference,slowMethods,rpcResponse} from './pc-inference.mjs';
@@ -42,7 +42,10 @@ export async function cloudHandle(request,env,legacy,fetcher=fetch,connections=r
  for(const name of ['content-type','cookie','x-csrf-token','accept','range','if-range','origin']){
   const value=request.headers.get(name);if(value)forwarded.set(name,value);
  }
+ if(url.pathname==='/__maintenance'&&request.headers.has('authorization'))forwarded.set('authorization',request.headers.get('authorization'));
  forwarded.set('X-Goodmona-Backend',env.CLOUD_BACKEND_KEY);
+ // Vercel overwrites this edge header; do not trust browser X-Forwarded-For.
+ forwarded.set('X-Goodmona-Client',request.headers.get('x-vercel-forwarded-for')?.split(',')[0]?.trim()||'unknown');
  forwarded.set('X-Goodmona-Route',url.pathname);
  try{
   const started=performance.now();
@@ -53,6 +56,9 @@ export async function cloudHandle(request,env,legacy,fetcher=fetch,connections=r
   for(const [name,value] of Object.entries(headers))outgoing.set(name,value);
   if((outgoing.get('content-type')||'').includes('text/html')){
    let html=await response.text();html=html.replace('</head>','<script>'+remoteScript+'</script></head>');
+   const nonce=randomBytes(18).toString('base64');
+   html=html.replace(/<script(?=[\s>])/gi,'<script nonce="'+nonce+'"');
+   outgoing.set('Content-Security-Policy',"default-src 'self'; script-src 'self' 'nonce-"+nonce+"'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; font-src 'self'; frame-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'");
    html=html.replace('<body>','<body><div style="padding:7px 15px;background:#edf3ff;border-bottom:1px solid #d8e3fc;text-align:right;font:12px system-ui;color:#245fe5">클라우드 업무 서버 · AI만 로컬 PC <a href="/__connect" style="margin-left:12px">AI PC 연결</a></div>');
    return new Response(html,{status:response.status,headers:outgoing});
   }

@@ -451,14 +451,15 @@ def install_intranet(app, store, current, manager, editor):
         if not body.name.strip():
             raise HTTPException(400, "직원 표시 이름을 입력하세요.")
         salt = secrets.token_hex(16)
-        hashed = password_hash(DEMO_PASSWORD, salt)
+        initial_password = secrets.token_urlsafe(24)
+        hashed = password_hash(initial_password, salt)
         with store.connect() as c:
             c.execute("BEGIN IMMEDIATE")
             if c.execute("SELECT 1 FROM users WHERE id=?", (body.id,)).fetchone():
                 raise HTTPException(409, "이미 사용 중인 아이디입니다.")
             c.execute("INSERT INTO users(id,name,role,salt,password_hash) VALUES(?,?,?,?,?)", (body.id, body.name.strip(), body.role, salt, hashed))
             store.audit(user["id"], "create_user", body.id, detail={"role": body.role}, connection=c)
-        return {"id": body.id, "revision": 1, "demo_password": DEMO_PASSWORD}
+        return {"id": body.id, "revision": 1, "demo_password": initial_password}
 
     @app.patch("/api/admin/users/{uid}")
     async def update_user(uid: str, body: UpdateUser, user=Depends(manager)):

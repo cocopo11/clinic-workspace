@@ -105,7 +105,7 @@ class Connection:
 
 
 @contextmanager
-def connect(url, *, shared=False):
+def connect(url, *, shared=False, schema=None):
     from psycopg_pool import ConnectionPool
     with _pool_lock:
         if url not in _pools:
@@ -115,6 +115,11 @@ def connect(url, *, shared=False):
         pool = _pools[url]
     with pool.connection() as raw:
         with raw.transaction():
+            if schema:
+                if not re.fullmatch(r"demo_[0-9a-f]{32}", schema):
+                    raise ValueError("Invalid workspace schema")
+                from psycopg import sql
+                raw.execute(sql.SQL("SET LOCAL search_path TO {}").format(sql.Identifier(schema)))
             # Serialize each short repository transaction across function instances.
             # Model inference is performed outside these transactions.
             # Readers can run together; state-changing transactions retain the

@@ -34,7 +34,7 @@ window.fetch=async(input,options={})=>{
 class Poll{
   constructor(url){this.url=url.replace(/\\/events$/,'/photos');this.listeners={};this.closed=false;this.signature=null;this.tick();}
   addEventListener(t,f){(this.listeners[t]??=[]).push(f);}emit(t){for(const f of this.listeners[t]||[])f({type:t});}
-  async tick(){if(this.closed)return;try{const r=await window.fetch(this.url,{cache:'no-store'});if(!r.ok)throw Error('사진 연결 확인');const s=JSON.stringify(await r.json());if(!this.closed){if(this.signature===null)this.emit('ready');else if(s!==this.signature)this.emit('photo');this.signature=s;}}catch(e){if(!this.closed)this.onerror?.(e);}finally{if(!this.closed)this.timer=setTimeout(()=>this.tick(),2000);}}
+  async tick(){if(this.closed)return;try{const r=await window.fetch(this.url,{cache:'no-store'});if([401,403,404].includes(r.status)){this.close();this.onerror?.(Error('사진 연결이 만료되었습니다. 다시 로그인하세요.'));return;}if(!r.ok)throw Error('사진 연결 확인');const s=JSON.stringify(await r.json());if(!this.closed){if(this.signature===null)this.emit('ready');else if(s!==this.signature)this.emit('photo');this.signature=s;}}catch(e){if(!this.closed)this.onerror?.(e);}finally{if(!this.closed)this.timer=setTimeout(()=>this.tick(),2000);}}
   close(){this.closed=true;clearTimeout(this.timer);}
 }
 window.EventSource=Poll;window.ClinicWorkspaceRemoteMode=true;
