@@ -16,7 +16,7 @@ test('ordinary pages and APIs reach the cloud even without a PC configuration',a
  assert.equal(response.headers.get('cache-control'),'no-store');
 });
 test('HTML keeps mobile polling and bounded upload adapter independently of the PC',async()=>{
- const r=await cloudHandle(req('/'),env,legacy,async(url,options)=>{assert.equal(String(url),origin+'/__runtime/__root');assert.equal(options.headers.get('x-goodmona-route'),'/');return new Response('<head></head><body>workspace</body>',{headers:{'content-type':'text/html'}});},noPC);
+ const r=await cloudHandle(req('/'),env,legacy,()=>{throw Error('public HTML must not call the database');},noPC);
  const html=await r.text();assert.match(html,/ClinicWorkspaceRemoteMode/);assert.match(html,/클라우드 업무 서버/);
 });
 test('offline inference reports 503 while ordinary cloud functions remain available',async()=>{

@@ -24,7 +24,7 @@ async function api(path,options={}){
 async function requestApi(path,{method='GET',body,form}={}){
  const requestCsrf=csrf,requestUser=user?.id;const headers={};if(csrf)headers['X-CSRF-Token']=csrf;if(body!==undefined)headers['Content-Type']='application/json';
  try{const result=await window.ClinicWorkspaceHTTP.requestJSON(path,{method,headers,credentials:'same-origin',cache:'no-store',body:form|| (body===undefined?undefined:JSON.stringify(body))});if((method!=='GET'&&/^\/api\/(leaves|documents|onboarding|notices)(\/|$)/.test(path))||(method==='GET'&&/^\/api\/documents\/[^/?]+$/.test(path)))document.dispatchEvent(new Event('clinicworkspace:staff-data'));return result;}
- catch(e){if(e.status===401&&csrf===requestCsrf&&user?.id===requestUser){loginLayer.style.display='grid';stopConnection();intranetApp.clear();geoApp?.clear();staffPortal?.clear();user=null;csrf='';account.replaceChildren();}throw e;}
+ catch(e){if(e.status===401&&csrf===requestCsrf&&user?.id===requestUser){loginLayer.style.display='flex';stopConnection();intranetApp.clear();geoApp?.clear();staffPortal?.clear();user=null;csrf='';account.replaceChildren();}throw e;}
 }
 function err(e){toast(e.message||String(e));}
 function stopConnection(){mobileRecorder?.clear();stream?.close();stream=null;selectedPatient=null;}
@@ -39,7 +39,7 @@ function applyUser(){
 
  account.innerHTML=`<span class="small">${esc(user.name)} · ${roleNames[user.role]}</span><button id="logoutBtn" style="font-size:12px;padding:5px 9px">로그아웃</button>`;
  $('resetClinicalData').classList.toggle('hidden',user.role!=='admin');
- $('logoutBtn').onclick=async()=>{try{await api('/api/logout',{method:'POST',body:{}});stopConnection();intranetApp.clear();geoApp?.clear();staffPortal?.clear();user=null;csrf='';account.replaceChildren();loginLayer.style.display='grid';$('patientWorkspace').classList.add('hidden');}catch(e){err(e);}};
+ $('logoutBtn').onclick=async()=>{try{await api('/api/logout',{method:'POST',body:{}});stopConnection();intranetApp.clear();geoApp?.clear();staffPortal?.clear();user=null;csrf='';account.replaceChildren();loginLayer.style.display='flex';$('patientWorkspace').classList.add('hidden');}catch(e){err(e);}};
  $$('nav [data-page="clinical"]').forEach(e=>e.classList.toggle('hidden',!clinicalRole()));
  $$('[data-page="clinical"]').filter(e=>!e.closest('nav')).forEach(e=>e.disabled=!clinicalRole());
  $$('[data-sub="charts"]').forEach(e=>e.classList.toggle('hidden',!clinicalRole()));
@@ -117,5 +117,5 @@ async function queryWiki(){if($('searchWiki').disabled)return;const requestingUs
 $('searchWiki').onclick=queryWiki;$('wikiQuestion').onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing&&!$('searchWiki').disabled){e.preventDefault();queryWiki();}};
 // The summary explicitly reflects connected and still-mock components.
 const ledger=document.querySelector('#home table tbody');if(ledger)ledger.innerHTML=`<tr><td>1</td><td>가상환자 조회, 사진 서버 저장·실시간 반영, 아이패드 녹음·자동 전사·자동 검토/수동 확인·모의 차트 등록, 기록 서식</td><td>실제 CRM 연동, 임상 검증·기관 운영 요건</td></tr><tr><td>2</td><td>직원 계정·권한 관리, 연차 저장·승인, 자료실·버전·승인·보관, 온보딩·접근 이력, 실제 임베딩·LLM RAG</td><td>기관 SSO·실제 인사 규정, 완전한 게시판, 병원 자료·품질 평가</td></tr><tr><td>3</td><td>단일 구간·수동 자막·제목 모션·무음 출력</td><td>원본 음성 포함 출력·다중 클립·자동 자막</td></tr><tr><td>4</td><td>공개 자료·유튜브 대본 기반 LLM 블로그, 검토·파일 출력, 4주 일정, AI 언급·인용 관찰 기록</td><td>실제 블로그 게시 API, 자동 성과 수집, 검색 노출 검증</td></tr>`;
-Promise.resolve(window.ClinicWorkspaceDemo?.init()).then(()=>api('/api/me')).then(r=>{user=r.user;csrf=r.csrf;applyUser();}).catch(()=>{loginLayer.style.display='grid';});
+Promise.resolve(window.ClinicWorkspaceDemo?.init()).then(()=>api('/api/me')).then(r=>{user=r.user;csrf=r.csrf;applyUser();}).catch(()=>{loginLayer.style.display='flex';});
 })();

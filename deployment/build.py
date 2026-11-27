@@ -37,8 +37,20 @@ for source in paths:
         for current, legacy in compatibility.items():
             text = text.replace(current, legacy)
     if source.parent.name == 'static':
-        text = re.sub(r'([?&]v=)[A-Za-z0-9._-]+', r'\g<1>20261125-security', text)
+        text = re.sub(r'([?&]v=)[A-Za-z0-9._-]+', r'\g<1>20261127-layout', text)
     target = backend / source.relative_to(root / 'server')
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding='utf-8')
+# Ship the complete page styling with HTML. A slow or filtered CSS request
+# must not leave reviewers looking at a partially styled application.
+for page in (backend / 'static').glob('*.html'):
+    def inline_style(match):
+        name = match.group(1)
+        css = (backend / 'static' / name).read_text(encoding='utf-8')
+        if '</style' in css.lower():
+            raise ValueError('Invalid bundled stylesheet')
+        return '<style data-stylesheet="'+name+'">'+css+'</style>'
+    html = re.sub(r'<link\s+rel="stylesheet"\s+href="/static/([A-Za-z0-9_-]+\.css)(?:\?[^"<>]*)?"\s*/?>',
+                  inline_style, page.read_text(encoding='utf-8'))
+    page.write_text(html, encoding='utf-8')
 print(output)

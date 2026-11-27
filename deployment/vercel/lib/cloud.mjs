@@ -3,16 +3,35 @@ import {registry} from './registry.mjs';
 import {remoteScript} from './remote.mjs';
 import {pcInference,slowMethods,rpcResponse} from './pc-inference.mjs';
 import {staticAsset} from './static-assets.mjs';
+import {publicPage} from './public-pages.mjs';
 
 const headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','X-Robots-Tag':'noindex, nofollow'};
 const json=(body,status=200)=>Response.json(body,{status,headers});
 const secureEqual=(a,b)=>{if(!a||!b)return false;const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.length&&timingSafeEqual(x,y);};
 const operations=new Set(['status','embedding_digest','embed','generate','generate_blog','youtube','youtube_status','audio_begin','audio_part','audio_finish','audio_abort','export_manifest','export_table','export_close','export_file']);
 
+function htmlResponse(html,status,outgoing){
+ const adapter='<script>'+remoteScript+'</script>';
+ // Mobile pages may omit the optional closing head tag.
+ if(html.includes('</head>'))html=html.replace('</head>',adapter+'</head>');
+ else html=html.replace(/<(?:body|main)(?=[\s>])/i,match=>adapter+match);
+ const nonce=randomBytes(18).toString('base64');
+ html=html.replace(/<script(?=[\s>])/gi,'<script nonce="'+nonce+'"');
+ outgoing.set('Content-Security-Policy',"default-src 'self'; script-src 'self' 'nonce-"+nonce+"'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; font-src 'self'; frame-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'");
+ html=html.replace(/<body(?=[\s>])([^>]*)>/i,'<body$1><div class="cloud-banner" style="padding:7px 15px;background:#edf3ff;border-bottom:1px solid #d8e3fc;text-align:right;font:12px system-ui;color:#245fe5">클라우드 업무 서버 · AI만 로컬 PC <a href="/__connect" style="margin-left:12px">AI PC 연결</a></div>');
+ return new Response(html,{status,headers:outgoing});
+}
+
 export async function cloudHandle(request,env,legacy,fetcher=fetch,connections=registry(env)){
  const url=new URL(request.url);
  if(url.searchParams.has('__gm_route')){url.pathname='/'+url.searchParams.get('__gm_route').replace(/^\/+/, '');url.searchParams.delete('__gm_route');request=new Request(url,request);}
  const asset=await staticAsset(request);if(asset)return asset;
+ const page=await publicPage(request);
+ if(page){
+  const outgoing=new Headers(page.headers);
+  for(const [name,value] of Object.entries(headers))outgoing.set(name,value);
+  return request.method==='HEAD'?new Response(null,{headers:outgoing}):htmlResponse(await page.text(),200,outgoing);
+ }
  if(url.pathname==='/__cloud/infer'){
   if(request.method!=='POST'||!secureEqual(request.headers.get('x-goodmona-backend'),env.CLOUD_BACKEND_KEY))return json({detail:'인증이 필요합니다.'},401);
   try{
@@ -55,12 +74,7 @@ export async function cloudHandle(request,env,legacy,fetcher=fetch,connections=r
   for(const name of ['content-length','content-encoding','transfer-encoding','server'])outgoing.delete(name);
   for(const [name,value] of Object.entries(headers))outgoing.set(name,value);
   if((outgoing.get('content-type')||'').includes('text/html')){
-   let html=await response.text();html=html.replace('</head>','<script>'+remoteScript+'</script></head>');
-   const nonce=randomBytes(18).toString('base64');
-   html=html.replace(/<script(?=[\s>])/gi,'<script nonce="'+nonce+'"');
-   outgoing.set('Content-Security-Policy',"default-src 'self'; script-src 'self' 'nonce-"+nonce+"'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; font-src 'self'; frame-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'");
-   html=html.replace('<body>','<body><div style="padding:7px 15px;background:#edf3ff;border-bottom:1px solid #d8e3fc;text-align:right;font:12px system-ui;color:#245fe5">클라우드 업무 서버 · AI만 로컬 PC <a href="/__connect" style="margin-left:12px">AI PC 연결</a></div>');
-   return new Response(html,{status:response.status,headers:outgoing});
+   return htmlResponse(await response.text(),response.status,outgoing);
   }
   if(['/api/status','/api/connection'].includes(url.pathname)&&response.ok){const data=await response.json();data.public_base_url=url.origin;return new Response(JSON.stringify(data),{status:200,headers:outgoing});}
   return new Response(response.body,{status:response.status,headers:outgoing});

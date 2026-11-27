@@ -1,6 +1,6 @@
 /* Presentation layer: preserve all existing nodes and business handlers. */
 (()=>{'use strict';const q=s=>document.querySelector(s),all=s=>[...document.querySelectorAll(s)];
-q('.brand').textContent='CLINICWORKSPACE';q('.top>.small').textContent='클리닉 업무 시스템';
+q('.brand').textContent='CLINIC WORKSPACE';q('.top>.small').textContent='클리닉 업무 시스템';
 const titles={home:'업무 홈',clinical:'진료 사진 · 기록',intranet:'직원 업무',geo:'GEO'};
 Object.entries(titles).forEach(([id,title])=>q('#'+id+' h1').textContent=title);
 q('#home .intro p').textContent='공지와 나의 업무 현황을 확인하고 필요한 업무로 이동하세요.';q('#home .intro>.pill').textContent='시연 환경';
@@ -23,4 +23,5 @@ const status=q('#serverStatus'),detail=document.createElement('details');detail.
 q('#intranet .intro p').textContent='자료를 찾고, 휴가를 신청하고, 필요한 교육을 확인하세요.';
 
 const importer=q('#youtubeImporter');if(importer){const d=document.createElement('details');d.innerHTML='<summary>유튜브 영상에서 새 자료 등록</summary>';[...importer.children].forEach(c=>d.append(c));importer.append(d);}
+document.documentElement.removeAttribute('data-app-loading');
 })();
